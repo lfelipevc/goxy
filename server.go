@@ -18,14 +18,14 @@ func removeOrigin(header *http.Header) {
 	header.Del("Referer")
 }
 
-func handleUserRequest(client_request *http.Request, w http.ResponseWriter) {
+func handleUserRequest(clientRequest *http.Request, w http.ResponseWriter) {
 	client := &http.Client{}
-	log.Println("Proxy URL Request:\t", client_request.URL)
-	resp, err := client.Do(client_request)
+	log.Println("Proxy URL Request:\t", clientRequest.URL)
+	resp, err := client.Do(clientRequest)
 	if err != nil {
 		log.Fatalln(err)
 	} else {
-		defer resp.Body.Close()
+		// defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err == nil {
 			log.Println("Proxy Reponse Headers:\t", resp.Header)
@@ -33,38 +33,43 @@ func handleUserRequest(client_request *http.Request, w http.ResponseWriter) {
 				for _, value := range values {
 					w.Header().Set(key, value)
 				}
-				addAllowOriginHeaders(w.Header(), client_request.Host)
+				addAllowOriginHeaders(w.Header(), clientRequest.Host)
 			}
+			// w.Write(resp.Body)
 			w.Write(body)
+			defer resp.Body.Close()
 		}
 	}
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	user_query_url := r.URL.Query().Get("url")
-	log.Println("User Request: ", r.URL.RequestURI(), "\t Method: ", r.Method)
-	if len(strings.TrimSpace(user_query_url)) != 0 {
-		user_request_url, err := url.Parse(user_query_url)
+
+	userQueryURL := r.URL.Query().Get("url")
+	log.Println("User Request: ", r.URL.String(), "\t Method: ", r.Method, " \tHeaders: ", r.Header)
+
+	if len(strings.TrimSpace(userQueryURL)) != 0 {
+		userRequestURL, err := url.Parse(userQueryURL)
 		if err == nil {
 
-			user_request_query := user_request_url.Query()
+			userRequestQuery := userRequestURL.Query()
 			for key, queryValues := range r.URL.Query() {
 				for _, queryValue := range queryValues {
 					if key != "url" {
-						user_request_query.Set(key, queryValue)
+						userRequestQuery.Set(key, queryValue)
 					}
 				}
 			}
-			user_request_url.RawQuery = user_request_query.Encode()
-			client_request, _ := http.NewRequest(r.Method, user_request_url.String(), r.Body)
-			log.Println("Request Headers:\t", r.Header)
+
+			userRequestURL.RawQuery = userRequestQuery.Encode()
+			clientRequest, _ := http.NewRequest(r.Method, userRequestURL.String(), r.Body)
+
 			for key, values := range r.Header {
 				for _, value := range values {
-					client_request.Header.Set(key, value)
+					clientRequest.Header.Set(key, value)
 				}
 			}
-			removeOrigin(&client_request.Header)
-			handleUserRequest(client_request, w)
+			removeOrigin(&clientRequest.Header)
+			handleUserRequest(clientRequest, w)
 
 		} else {
 			w.Write([]byte("url format not valid"))
@@ -78,7 +83,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Println("starting proxy ...")
+	log.Println("starting proxy ... port: 8000")
 	http.HandleFunc("/", handler)
 	log.Fatal(http.ListenAndServe(":8000", nil))
 
